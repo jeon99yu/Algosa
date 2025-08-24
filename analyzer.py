@@ -1,20 +1,26 @@
+# analyzer.py
 import json
 import re
+import logging
 from openai import OpenAI
 from config import OPENAI_API_KEY
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def analyze_reviews(reviews):
-    text = "\n".join(reviews[:100])  # 리뷰가 많으면 최대 100개만 샘플링
+def analyze_reviews(reviews, sample_size=100):
+    """
+    리뷰 리스트를 받아서 LLM으로 분석 → JSON 반환
+    """
+    text = "\n".join(reviews[:sample_size])
 
     prompt = f"""
-    아래 리뷰들을 분석해 주세요:
+    Please analyze the reviews below:
 
     {text}
 
-    출력은 반드시 아래 JSON 형식만 반환하세요.
-    다른 설명 문장은 절대 포함하지 마세요.
+    The output must be returned only in the JSON format below.
+    Never include other explanations.
+    And TOP_POSITIVE and TOP_NEGATIVE are the most mentioned contents and show them like practical reviews.
 
     {{
         "positive": "긍정 %",
@@ -22,32 +28,32 @@ def analyze_reviews(reviews):
         "negative": "부정 %",
         "summary": "전체 리뷰 요약",
         "keywords": ["키워드1", "키워드2", "키워드3"],
-        "top_positive": ["긍정 리뷰 요약1", "긍정 리뷰 요약2", "긍정 리뷰 요약3"],
-        "top_negative": ["부정 리뷰 요약1", "부정 리뷰 요약2", "부정 리뷰 요약3"],
-        "common_opinion": "구매자들이 공통적으로 언급한 내용을 토대로 어떤 구매자들이 구매하면 좋을지 추천해줘"
+        "top_positive": ["긍정 리뷰 요약 1", "긍정 리뷰 요약 2", "긍정 리뷰 요약 3"],
+        "top_negative": ["부정 리뷰 요약 1", "부정 리뷰 요약 2", "부정 리뷰 요약 3"],
+        "common_opinion": "구매자들이 공통적으로 언급한 점을 기반으로 구매 시 참고할 만한 조언"
     }}
     """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        content = response.choices[0].message.content
-        if isinstance(content, list):
-            content = "".join([c["text"] for c in content if "text" in c])
-        content = content.strip()
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600
+        )
+        content = response.choices[0].message["content"].strip()
 
-        # 순수 JSON만 추출
+        # JSON 블록만 추출
         match = re.search(r"\{.*\}", content, re.S)
         if match:
-            return json.loads(match.group())
+            content = match.group()
+
+        # 문자열 정리
+        content = content.strip().strip("`")
 
         return json.loads(content)
 
     except Exception as e:
-        print("JSON 파싱 실패:", e)
+        logging.error(f"리뷰 분석 실패: {e}")
         return {
             "positive": "0%",
             "neutral": "0%",
