@@ -5,7 +5,6 @@ from datetime import datetime
 from db import init_db, save_products, save_reviews, get_last_collected_date, update_last_collected_date
 
 def get_products(category="103004", top_n=50):
-    """카테고리별 상품 가져오기"""
     url = f"https://api.musinsa.com/api2/dp/v1/plp/goods?gf=A&category={category}&size={top_n}&caller=CATEGORY&page=1"
     res = requests.get(url, headers={"user-agent": "Mozilla/5.0"})
     res.raise_for_status()
@@ -24,7 +23,6 @@ def get_products(category="103004", top_n=50):
 
 
 def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
-    """상품별 리뷰 가져오기 (last_collected_date 이후만)"""
     reviews, collected = [], 0
     base_url = "https://goods.musinsa.com/api2/review/v1/view/list"
 
@@ -61,7 +59,7 @@ def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
                 "grade": r.get("grade"),
             })
             collected += 1
-        time.sleep(0.2)  # 서버 부하 방지
+        time.sleep(0.2)  
 
     # (product_id + userNickName) 기준으로 중복 제거 → 최신 리뷰만 유지
     df = pd.DataFrame(reviews)
@@ -73,10 +71,7 @@ def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
         )
     return df
 
-
 def run_crawler(category="103004", num_products=60, max_reviews=300):
-    """크롤러 실행 → DB 저장"""
-    # DB 초기화 (테이블 생성)
     init_db()
 
     products_df = get_products(category=category, top_n=num_products)
@@ -84,16 +79,13 @@ def run_crawler(category="103004", num_products=60, max_reviews=300):
 
     for _, row in products_df.iterrows():
         goods_no = row["product_id"]
-
         # DB에서 마지막 수집일 가져오기
         last_date = get_last_collected_date(goods_no)
-
         # 리뷰 크롤링
         product_reviews_df = get_reviews(goods_no, last_collected_date=last_date, max_reviews=max_reviews)
 
         if not product_reviews_df.empty:
             all_reviews.append(product_reviews_df)
-
             # 최신 리뷰일 추출해서 DB 업데이트
             latest_date = product_reviews_df["createDate"].max().date()
             update_last_collected_date(goods_no, latest_date)

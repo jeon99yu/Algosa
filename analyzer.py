@@ -1,4 +1,3 @@
-# analyzer.py
 import json
 import re
 import logging
@@ -7,60 +6,54 @@ from config import OPENAI_API_KEY
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def analyze_reviews(reviews, sample_size=100):
+def summarize_reviews(reviews, sample_size=50):
     """
-    리뷰 리스트를 받아서 LLM으로 분석 → JSON 반환
+    리뷰 리스트를 받아서 전체적인 평가 요약을 JSON 형태로 반환
+    - positive_negative: 긍정/부정 의견 핵심
+    - features: 자주 언급된 특징
+    - cautions: 소비자가 주의해야 할 점
     """
     text = "\n".join(reviews[:sample_size])
 
     prompt = f"""
-    Please analyze the reviews below:
+    다음은 어떤 상품에 대한 리뷰 모음입니다.
+    이를 읽고 다음 항목에 따라 요약하세요.
+    - positive_negative: 긍정/부정 핵심의견을 통한 전반적인 평가를 구체적으로 해주세요.
+    - features: 자주 언급되는 제품의 장점 3가지
+    - cautions: 소비자들이 주의해야 할 점 3가지
 
+    리뷰:
     {text}
 
-    The output must be returned only in the JSON format below.
-    Never include other explanations.
-    And TOP_POSITIVE and TOP_NEGATIVE are the most mentioned contents and show them like practical reviews.
-
+    반드시 아래 JSON 형식으로만 출력하세요. 다른 설명은 하지 마세요.
     {{
-        "positive": "긍정 %",
-        "neutral": "중립 %",
-        "negative": "부정 %",
-        "summary": "전체 리뷰 요약",
-        "keywords": ["키워드1", "키워드2", "키워드3"],
-        "top_positive": ["긍정 리뷰 요약 1", "긍정 리뷰 요약 2", "긍정 리뷰 요약 3"],
-        "top_negative": ["부정 리뷰 요약 1", "부정 리뷰 요약 2", "부정 리뷰 요약 3"],
-        "common_opinion": "구매자들이 공통적으로 언급한 점을 기반으로 구매 시 참고할 만한 조언"
+        "positive_negative": "긍/부정 의견 핵심 요약",
+        "features": ["특징1", "특징2", "특징3"],
+        "cautions": ["주의사항1", "주의사항2" ,"주의사항3"]
     }}
     """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are a helpful review analysis assistant."},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=600
         )
-        content = response.choices[0].message["content"].strip()
+        content = response.choices[0].message.content.strip()
 
-        # JSON 블록만 추출
         match = re.search(r"\{.*\}", content, re.S)
         if match:
             content = match.group()
 
-        # 문자열 정리
-        content = content.strip().strip("`")
-
         return json.loads(content)
 
     except Exception as e:
-        logging.error(f"리뷰 분석 실패: {e}")
+        logging.error(f"요약 분석 실패: {e}")
         return {
-            "positive": "0%",
-            "neutral": "0%",
-            "negative": "0%",
-            "summary": "분석 실패",
-            "keywords": [],
-            "top_positive": [],
-            "top_negative": [],
-            "common_opinion": ""
+            "positive_negative": "⚠️ 요약 실패",
+            "features": [],
+            "cautions": []
         }
