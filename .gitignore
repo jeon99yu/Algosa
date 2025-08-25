@@ -7,3 +7,6 @@ __pycache__/
 
 # 로그 파일
 *.log
+
+# 기타 보안관련 파일
+config.py
