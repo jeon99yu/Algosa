@@ -1,9 +1,10 @@
 import pymysql
-import pandas as pd
 from datetime import datetime
 from config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 
-#  DB 연결
+# -------------------------
+# DB 연결
+# -------------------------
 def get_connection():
     return pymysql.connect(
         host=DB_HOST,
@@ -14,7 +15,9 @@ def get_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
+# -------------------------
 # DB 초기화 (테이블 생성)
+# -------------------------
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
@@ -29,7 +32,8 @@ def init_db():
         reviewCount INT,
         reviewScore FLOAT,
         thumbnail TEXT,
-        goodsLinkUrl TEXT
+        goodsLinkUrl TEXT,
+        category VARCHAR(50)
     ) CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """)
 
@@ -58,74 +62,52 @@ def init_db():
     conn.commit()
     conn.close()
 
-#  상품 저장 (전체 덮어쓰기)
-def save_products(product_df: pd.DataFrame):
+# -------------------------
+# 저장 함수
+# -------------------------
+def save_products(product_df):
     if product_df.empty:
         return
     conn = get_connection()
     cur = conn.cursor()
-
-    # 기존 상품 전체 삭제 후 새로 삽입
-    cur.execute("DELETE FROM products;")
-
     sql = """
     INSERT INTO products
-    (product_id, brandName, goodsName, price, reviewCount, reviewScore, thumbnail, goodsLinkUrl)
-    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+    (product_id, brandName, goodsName, price, reviewCount, reviewScore, thumbnail, goodsLinkUrl, category)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    ON DUPLICATE KEY UPDATE
+        brandName=VALUES(brandName),
+        goodsName=VALUES(goodsName),
+        price=VALUES(price),
+        reviewCount=VALUES(reviewCount),
+        reviewScore=VALUES(reviewScore),
+        thumbnail=VALUES(thumbnail),
+        goodsLinkUrl=VALUES(goodsLinkUrl),
+        category=VALUES(category)
     """
-    cur.executemany(sql, [tuple(row) for _, row in product_df.iterrows()])
+    values = product_df[[
+        "product_id", "brandName", "goodsName", "price",
+        "reviewCount", "reviewScore", "thumbnail", "goodsLinkUrl", "category"
+    ]].fillna("").values.tolist()
+    cur.executemany(sql, values)
     conn.commit()
     conn.close()
 
-
-#  리뷰 저장 (batch insert 적용)
-def save_reviews(review_df: pd.DataFrame, batch_size=1000):
-    if review_df.empty:
+def save_reviews(df):
+    if df is None or df.empty:
         return
     conn = get_connection()
     cur = conn.cursor()
-
-    sql = """
-    INSERT INTO reviews
-    (review_no, product_id, createDate, userNickName, content, grade)
-    VALUES (%s,%s,%s,%s,%s,%s)
-    ON DUPLICATE KEY UPDATE 
-        createDate=VALUES(createDate),
-        content=VALUES(content),
-        grade=VALUES(grade)
-    """
-    values = review_df[["review_no", "product_id", "createDate", "userNickName", "content", "grade"]].values.tolist()
-
-    # batch insert
-    for i in range(0, len(values), batch_size):
-        cur.executemany(sql, values[i:i+batch_size])
-
+    values = df[["review_no", "product_id", "createDate", "userNickName", "content", "grade"]].values.tolist()
+    cur.executemany("""
+        REPLACE INTO reviews (review_no, product_id, createDate, userNickName, content, grade)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, values)
     conn.commit()
     conn.close()
 
-
-# 상품 불러오기
-def load_products():
-    conn = get_connection()
-    df = pd.read_sql("SELECT * FROM products", conn)
-    conn.close()
-    return df
-
-
-# 특정 상품 리뷰 불러오기
-def load_reviews(product_id: str = None):
-    conn = get_connection()
-    if product_id:
-        query = "SELECT * FROM reviews WHERE product_id = %s ORDER BY createDate DESC"
-        df = pd.read_sql(query, conn, params=[product_id])
-    else:
-        query = "SELECT * FROM reviews ORDER BY createDate DESC LIMIT 100"
-        df = pd.read_sql(query, conn)
-    conn.close()
-    return df
-
-
-# 마지막 리뷰 수집일 불러오기
+# -------------------------
+# 마지막 리뷰 수집일 관리
+# -------------------------
 def get_last_collected_date(product_id: str):
     conn = get_connection()
     cur = conn.cursor()
@@ -137,8 +119,6 @@ def get_last_collected_date(product_id: str):
     else:
         return datetime(2000, 1, 1).date()
 
-
-# 마지막 리뷰 수집일 갱신
 def update_last_collected_date(product_id: str, latest_date):
     conn = get_connection()
     cur = conn.cursor()
