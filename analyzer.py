@@ -57,3 +57,61 @@ def summarize_reviews(reviews, sample_size=50):
             "features": [],
             "cautions": []
         }
+    
+def summarize_size_and_fit(reviews, sample_size=80):
+    text = "\n".join(reviews[:sample_size])
+    prompt = f"""
+    아래는 어떤 신발에 대한 사용자 리뷰입니다. '사이즈 체감/착화감'만 요약하세요.
+    - size_summary: 한 문장 요약(예: '정사이즈 경향, 발볼 넓으면 반 사이즈 업 권장')
+    - recommendations: 소비자에게 줄 구체 조언 3가지(사이즈 선택, 발볼/발등, 양말 두께/끈 조절 등)
+    리뷰:
+    {text}
+    반드시 아래 JSON만 출력:
+    {{
+      "size_summary": "문장",
+      "recommendations": ["조언1","조언2","조언3"]
+    }}
+    """
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"system","content":"You are a concise sizing assistant."},
+                      {"role":"user","content":prompt}],
+            max_tokens=400
+        )
+        import json, re
+        s = resp.choices[0].message.content.strip()
+        m = re.search(r"\{.*\}", s, re.S)
+        if m: s = m.group()
+        return json.loads(s)
+    except Exception:
+        return {"size_summary":"요약 실패","recommendations":[]}
+
+def summarize_coordination(reviews, sample_size=80):
+    text = "\n".join(reviews[:sample_size])
+    prompt = f"""
+    아래 리뷰를 바탕으로 '코디/활용'만 요약하세요.
+    - coord_summary: 한 문장 요약(예: '캐주얼·데일리에 적합, 슬랙스/데님 매치 좋음')
+    - outfit_tips: 코디 팁 3가지(스타일/계절/활동/컬러 등)
+    리뷰:
+    {text}
+    반드시 아래 JSON만 출력:
+    {{
+      "coord_summary": "문장",
+      "outfit_tips": ["팁1","팁2","팁3"]
+    }}
+    """
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"system","content":"You are a styling assistant."},
+                      {"role":"user","content":prompt}],
+            max_tokens=400
+        )
+        import json, re
+        s = resp.choices[0].message.content.strip()
+        m = re.search(r"\{.*\}", s, re.S)
+        if m: s = m.group()
+        return json.loads(s)
+    except Exception:
+        return {"coord_summary":"요약 실패","outfit_tips":[]}

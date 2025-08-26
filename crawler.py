@@ -6,12 +6,11 @@ from db import (
     init_db, save_products, save_reviews,
     get_last_collected_date, update_last_collected_date
 )
-
 # -------------------------
 # 카테고리 매핑
 # -------------------------
 CATEGORY_MAP = {
-    "운동화": "103004",
+    "스니커즈": "103004",
     "스포츠화": "103005",
     "구두": "103001"
 }
@@ -65,8 +64,7 @@ def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
             if dt is None:
                 continue
 
-            # 마지막 수집일 이후 데이터만 저장
-            if dt.date() <= last_collected_date:
+            if dt.date() <= last_collected_date: # 마지막 수집일 이후 데이터만 저장
                 continue
 
             reviews.append({
@@ -129,7 +127,7 @@ def run_all_crawlers(num_products=60, max_reviews=300):
     return all_products_df, all_reviews_df
 
 # -------------------------
-# 실행 (테스트용)
+# 실행
 # -------------------------
 if __name__ == "__main__":
     products, reviews = run_all_crawlers(num_products=60, max_reviews=300)
