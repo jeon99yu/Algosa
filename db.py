@@ -130,4 +130,3 @@ def update_last_collected_date(product_id: str, latest_date):
     cur.execute(sql, (product_id, latest_date))
     conn.commit()
     conn.close()
-    

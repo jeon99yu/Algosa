@@ -12,7 +12,9 @@ def render_tabs(reviews_df: pd.DataFrame, products: pd.DataFrame):
     kpis = compute_kpis(reviews_df)
 
     # KPI 요약
+    st.divider()
     st.markdown("### 📌 요약 지표")
+    
     m1, m2, m3 = st.columns([0.8, 1.2, 2.0]) 
     m1.metric("분석대상 리뷰 수", f"{kpis['total']:,}개")
     m2.metric("긍정 / 중립 / 부정", f"{kpis['pos']:,} / {kpis['neu']:,} / {kpis['neg']:,}")
