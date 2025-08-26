@@ -10,3 +10,6 @@ __pycache__/
 
 # 기타 보안관련 파일
 config.py
+
+# db파일
+musinsa.db
