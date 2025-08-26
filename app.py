@@ -7,8 +7,26 @@ from modules.data import load_products_by_category, load_reviews_by_product
 from modules.tabs import render_tabs
 from crawler import run_all_crawlers
 
-setup_page(title="📦 ALGOSA")
+setup_page(title="📦 ALGOSA!")
 st.markdown("####  MUSINSA 상품리뷰 AI분석 서비스")
+
+st.markdown("""
+    <style>
+    header[data-testid="stHeader"]{
+    background: #000 !important;
+    border-bottom: 1px solid #222 !important;
+    }
+
+    header[data-testid="stHeader"] .stAppToolbar,
+    header[data-testid="stHeader"] .stToolbar{
+    background: #000 !important;
+    }
+
+    header[data-testid="stHeader"] *{
+    color: #e5e7eb !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 사이드바
 CATEGORY_MAP = {"스니커즈": "103004", 

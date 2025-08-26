@@ -3,7 +3,7 @@ import streamlit as st
 from PIL import Image
 
 def setup_page(title: str):
-    st.set_page_config(page_title="ALGOSA", layout="wide")
+    st.set_page_config(page_title="알고사(ALGOSA) AI 리뷰분석서비스", layout="wide")
 
     st.markdown( # CSS 설정
         """
