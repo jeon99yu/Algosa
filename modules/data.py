@@ -3,7 +3,7 @@ from sqlalchemy import text
 from config import engine
 import streamlit as st
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300) # 캐시방지
 def load_products_by_category(cat_code: str) -> pd.DataFrame:
     query = """
         SELECT product_id, brandName, goodsName, price, reviewCount, reviewScore,

@@ -78,11 +78,10 @@ def render_tabs(reviews_df: pd.DataFrame, products: pd.DataFrame):
                 max_features=2000,
             )
 
-
             if not freq:
                 st.info("표시할 키워드가 없습니다.")
             else:
-                topn = st.slider("표시 개수", 3, 10, 5, 1, key="kw_topn_tab3")
+                topn = st.slider("표시 개수", 5, 15, 10, 1, key="kw_topn_tab3")
                 items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:topn]
                 kw_df = pd.DataFrame(items, columns=["keyword", "count"])
 
@@ -115,4 +114,3 @@ def render_tabs(reviews_df: pd.DataFrame, products: pd.DataFrame):
         p_df = products.loc[:, show_cols].copy() 
         p_df = p_df.rename(columns={"brandName":"브랜드","goodsName":"상품명","price":"가격","reviewScore":"평점","reviewCount":"리뷰 수"}) 
         st.dataframe(p_df, use_container_width=True, hide_index=True)
-
