@@ -4,7 +4,7 @@ import pandas as pd
 from analyzer import summarize_reviews, summarize_size_and_fit, summarize_coordination
 from modules.analytics import (
     compute_kpis, sentiment_percentages, donut_figure,
-    default_stopwords, keyword_freq, wordcloud_figure, topn_bar_figure
+    default_stopwords, keyword_freq, wordcloud_figure, topn_progress_table,
 )
 
 def render_tabs(reviews_df: pd.DataFrame, products: pd.DataFrame):
@@ -70,33 +70,54 @@ def render_tabs(reviews_df: pd.DataFrame, products: pd.DataFrame):
     # Tab3: 키워드 워드클라우드
     with tab3:
         st.markdown("### 🔤 리뷰 키워드 분석")
+
         if len(reviews_texts) == 0:
             st.info("키워드 분석할 리뷰가 없습니다.")
         else:
             freq = keyword_freq(
                 reviews_texts,
                 stopwords=default_stopwords(),
-                use_morph=True,          # konlpy 설치 시 명사 기준, 미설치면 자동 우회
+                use_morph=True,          # konlpy 설치 시 명사 기준
                 max_features=2000,
             )
 
             if not freq:
                 st.info("표시할 키워드가 없습니다.")
             else:
-                topn = st.slider("표시 개수", 5, 15, 10, 1, key="kw_topn_tab3")
-                items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:topn]
+                items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:10]
                 kw_df = pd.DataFrame(items, columns=["keyword", "count"])
+                max_count = int(kw_df["count"].max() or 1)
 
                 k1, k2 = st.columns([1, 1])
-                with k1:
+                
+                with k1: # WordCloud
+                    st.markdown("#### 워드 클라우드")
+
                     fig_wc, _ = wordcloud_figure(freq)
                     if fig_wc is None:
                         st.info("한글 폰트를 찾지 못해 워드클라우드를 표시할 수 없습니다.")
                     else:
                         st.pyplot(fig_wc, use_container_width=True)
-                with k2:
-                    fig_bar = topn_bar_figure(kw_df, topn)
-                    st.pyplot(fig_bar, use_container_width=True)
+                        st.write('해당 상품 리뷰에 가장 많이 등장한 키워드들입니다.')
+            
+                with k2: # 진행바 테이블
+                    st.markdown("#### 최다 언급 키워드 TOP 10")
+
+                    st.dataframe(
+                        kw_df.rename(columns={"keyword": "키워드", "count": "빈도"}),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "키워드": st.column_config.TextColumn("키워드"),
+                            "빈도": st.column_config.ProgressColumn(
+                                "빈도",
+                                help="선택된 상위 키워드 빈도수",
+                                format="%d개",
+                                min_value=0,
+                                max_value=max_count,
+                            ),
+                        },
+                    )
 
     # 리뷰 원본/상품 테이블
     st.divider()
