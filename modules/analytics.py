@@ -2,14 +2,57 @@ import os, re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import font_manager as fm
 from typing import Optional, Tuple, Dict, List
 from collections import Counter
 
 from wordcloud import WordCloud
 from sklearn.feature_extraction.text import CountVectorizer
 
-plt.rcParams["font.family"] = "Malgun Gothic"
+# -------------------------
+# 한글 폰트 경로 탐색 함수
+# -------------------------
+def _font_path() -> Optional[str]:
+    # Dockerfile에서 COPY한 경로
+    local_font_dir = "/usr/local/share/fonts/truetype/local"
+    if os.path.exists(local_font_dir):
+        for root, _, files in os.walk(local_font_dir):
+            for fn in files:
+                if fn.lower().endswith((".ttf", ".ttc", ".otf")):
+                    return os.path.join(root, fn)
+
+    # 개발용: 프로젝트 font 폴더
+    proj_font_dir = os.path.join(os.path.dirname(__file__), "..", "font")
+    if os.path.exists(proj_font_dir):
+        for root, _, files in os.walk(proj_font_dir):
+            for fn in files:
+                if fn.lower().endswith((".ttf", ".ttc", ".otf")):
+                    return os.path.join(root, fn)
+
+    # 시스템 기본 후보
+    for p in [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    ]:
+        if os.path.exists(p):
+            return p
+
+    return None
+
+# -------------------------
+# Matplotlib 전체에 적용
+# -------------------------
+font_path = _font_path()
+if font_path:
+    fm.fontManager.addfont(font_path)
+    font_name = fm.FontProperties(fname=font_path).get_name()
+    plt.rcParams["font.family"] = [font_name, "DejaVu Sans"]
+else:
+    # 폰트 못 찾으면 fallback
+    plt.rcParams["font.family"] = "DejaVu Sans"
+
 plt.rcParams["axes.unicode_minus"] = False
+
 
 # konlpy가 있으면 명사 기반, 없으면 자동 우회
 try:
@@ -108,24 +151,28 @@ def _post_filter(freq: Dict[str, int], stop: set[str], remove_suffixes: bool = T
 def keyword_freq(
     reviews_texts: List[str],
     stopwords: Optional[List[str]] = None,
-    use_morph: bool = False,         # konlpy(Okt) 사용 여부
+    use_morph: bool = False,       # konlpy(Okt) 사용 여부
     max_features: int = 2000,
     remove_suffixes: bool = True,
 ) -> Dict[str, int]:
     stop = set(stopwords or default_stopwords())
 
-    # konlpy(Okt) 있으면 명사 기반
-    if use_morph and _HAS_KONLPY:
-        okt = Okt()  # type: ignore
-        bag: List[str] = []
-        for t in reviews_texts:
-            # 명사만 사용 + 2자 이상 + 불용어 제거
-            nouns = [w for w in okt.nouns(t) if len(w) >= 2 and w not in stop]
-            bag.extend(nouns)
-        base = dict(Counter(bag))
-        return _post_filter(base, stop, remove_suffixes)
+    # 1) 명사 기반 시도 (JVM/KoNLPy 문제 시 바로 폴백)
+    if use_morph:
+        try:
+            from konlpy.tag import Okt
+            okt = Okt()  # <- 여기서 JVM 없으면 예외
+            bag: List[str] = []
+            for t in reviews_texts:
+                nouns = [w for w in okt.nouns(t) if len(w) >= 2 and w not in stop]
+                bag.extend(nouns)
+            base = dict(Counter(bag))
+            return _post_filter(base, stop, remove_suffixes)
+        except Exception:
+            # JVM/KoNLPy 실패 시 자동 폴백
+            pass
 
-    # 우회: 2글자 이상 한글 토큰화 + 불용어 제거
+    # 2) 폴백: 2글자 이상 한글 토큰 + 불용어 제거
     vectorizer = CountVectorizer(
         token_pattern=r"(?u)[가-힣]{2,}",
         stop_words=list(stop),

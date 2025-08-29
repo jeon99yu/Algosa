@@ -9,7 +9,7 @@ def load_products_by_category(cat_code: str) -> pd.DataFrame:
         SELECT product_id, brandName, goodsName, price, reviewCount, reviewScore,
                thumbnail, goodsLinkUrl, category
         FROM products
-        WHERE category = %s
+        WHERE category = ?
     """
     return pd.read_sql(query, engine, params=(cat_code,))
 

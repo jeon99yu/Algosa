@@ -22,7 +22,7 @@ def setup_page(title: str):
     st.title(title)
 
 def render_sidebar(category_map: dict[str, str]) -> tuple[str, bool]:
-    st.sidebar.image(Image.open("assets/logo/title.png"), use_container_width=True)
+    st.sidebar.image(Image.open("/app/assets/logo/title.png"), use_container_width=True)
     st.sidebar.header("무신사 추천순 🔽")
     
     name = st.sidebar.selectbox("카테고리를 선택하세요", list(category_map.keys()))
