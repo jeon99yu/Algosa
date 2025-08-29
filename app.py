@@ -7,6 +7,12 @@ from modules.data import load_products_by_category, load_reviews_by_product
 from modules.tabs import render_tabs
 from crawler import run_all_crawlers
 
+# 추가: SQLite 모드일 때 테이블 자동 생성
+from config import USE_MYSQL
+if not USE_MYSQL:
+    from db import init_db
+    init_db()
+
 setup_page(title="📦 ALGOSA!")
 st.markdown("####  MUSINSA 상품리뷰 AI분석 서비스")
 

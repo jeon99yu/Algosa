@@ -1,11 +1,12 @@
 import time
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from db import (
     init_db, save_products, save_reviews,
     get_last_collected_date, update_last_collected_date
 )
+
 # -------------------------
 # 카테고리 매핑
 # -------------------------
@@ -14,6 +15,7 @@ CATEGORY_MAP = {
     "스포츠화": "103005",
     "구두": "103001"
 }
+
 # -------------------------
 # 상품 목록 크롤링
 # -------------------------
@@ -22,7 +24,6 @@ def get_products(category="103004", top_n=50):
     res = requests.get(url, headers={"user-agent": "Mozilla/5.0"})
     res.raise_for_status()
     items = res.json().get("data", {}).get("list", [])
-
     return pd.DataFrame([{
         "product_id": str(item.get("goodsNo")),
         "brandName": item.get("brandName"),
@@ -32,17 +33,43 @@ def get_products(category="103004", top_n=50):
         "reviewScore": item.get("reviewScore"),
         "thumbnail": item.get("thumbnail"),
         "goodsLinkUrl": item.get("goodsLinkUrl"),
-        "category": category 
+        "category": category
     } for item in items])
 
 # -------------------------
-# 리뷰 크롤링
+# 리뷰 크롤링 (증분 수집 + 병합용)
 # -------------------------
-def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
+def _parse_review_row(r, goods_no: str):
+    raw_date = r.get("createDate")
+    if not raw_date:
+        return None
+    # 예: "2025-08-25T07:31:22.000Z"
+    dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+    date_str = dt.strftime("%Y-%m-%d")   # <-- 여기서 포맷 적용
+    return {
+        "review_no": str(r.get("no") or r.get("reviewNo") or r.get("reviewId")),
+        "product_id": str(goods_no),
+        "createDate": date_str,
+        "userNickName": r.get("userProfileInfo", {}).get("userNickName"),
+        "content": r.get("content"),
+        "grade": r.get("grade"),
+    }
+
+def get_reviews(
+    goods_no: str,
+    last_collected_date: date | None,
+    max_reviews: int = 300,
+    page_size: int = 20,
+    sleep_sec: float = 0.2,
+    backfill: bool = False,  # True면 last_collected_date를 무시(전체 수집)
+) -> pd.DataFrame:
+    if last_collected_date is None or backfill:
+        last_collected_date = date(1900, 1, 1)
+
     reviews, collected = [], 0
     base_url = "https://goods.musinsa.com/api2/review/v1/view/list"
 
-    for page in range(1, 21):  # 최대 20페이지
+    for page in range(1, 1000):
         if collected >= max_reviews:
             break
 
@@ -58,41 +85,35 @@ def get_reviews(goods_no, last_collected_date, max_reviews=200, page_size=20):
         for r in items:
             if collected >= max_reviews:
                 break
-
-            raw_date = r.get("createDate")
-            dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00")) if raw_date else None
-            if dt is None:
+            row = _parse_review_row(r, goods_no)
+            if not row:
                 continue
 
-            if dt.date() <= last_collected_date: # 마지막 수집일 이후 데이터만 저장
+            dt = datetime.fromisoformat(row["createDate"])  # 문자열이지만 YYYY-MM-DD 포맷이라 OK
+            if dt.date() <= last_collected_date:
                 continue
 
-            reviews.append({
-                "review_no": str(r.get("no") or r.get("reviewNo") or r.get("reviewId")),
-                "product_id": str(goods_no),
-                "createDate": dt.strftime("%Y-%m-%d"),
-                "userNickName": r.get("userProfileInfo", {}).get("userNickName"),
-                "content": r.get("content"),
-                "grade": r.get("grade"),
-            })
+            reviews.append(row)
             collected += 1
-        time.sleep(0.2)
+
+        time.sleep(sleep_sec)
 
     df = pd.DataFrame(reviews)
-    if not df.empty:
-        df["createDate"] = pd.to_datetime(df["createDate"])
-        df = (
-            df.sort_values(by="createDate", ascending=False)
-              .drop_duplicates(subset=["product_id", "userNickName"], keep="first")
-        )
-        df["grade"] = pd.to_numeric(df["grade"], errors="coerce").fillna(0).astype(int)
+    if df.empty:
+        return df
 
+    df["createDate"] = pd.to_datetime(df["createDate"])
+    df["grade"] = pd.to_numeric(df["grade"], errors="coerce").fillna(0).astype(int)
+    df = (
+        df.sort_values(by="createDate")
+          .drop_duplicates(subset=["review_no"], keep="last")
+    )
     return df
 
 # -------------------------
 # 크롤러 실행 (전체 카테고리)
 # -------------------------
-def run_all_crawlers(num_products=60, max_reviews=300):
+def run_all_crawlers(num_products: int = 60, max_reviews: int = 300, backfill: bool = False):
     init_db()
     all_products, all_reviews = [], []
 
@@ -105,7 +126,12 @@ def run_all_crawlers(num_products=60, max_reviews=300):
             goods_no = row["product_id"]
 
             last_date = get_last_collected_date(goods_no)
-            product_reviews_df = get_reviews(goods_no, last_collected_date=last_date, max_reviews=max_reviews)
+            product_reviews_df = get_reviews(
+                goods_no,
+                last_collected_date=last_date,
+                max_reviews=max_reviews,
+                backfill=backfill,
+            )
 
             if not product_reviews_df.empty:
                 cat_reviews.append(product_reviews_df)
@@ -121,17 +147,15 @@ def run_all_crawlers(num_products=60, max_reviews=300):
         all_products.append(products_df)
         all_reviews.append(reviews_df)
 
-    all_products_df = pd.concat(all_products, ignore_index=True)
-    all_reviews_df = pd.concat(all_reviews, ignore_index=True)
-
+    all_products_df = pd.concat(all_products, ignore_index=True) if all_products else pd.DataFrame()
+    all_reviews_df = pd.concat(all_reviews, ignore_index=True) if all_reviews else pd.DataFrame()
     return all_products_df, all_reviews_df
 
 # -------------------------
 # 실행
 # -------------------------
 if __name__ == "__main__":
-    products, reviews = run_all_crawlers(num_products=60, max_reviews=300)
-
+    products, reviews = run_all_crawlers(num_products=60, max_reviews=300, backfill=False)
     print(f"\n총 상품 개수: {len(products)}개")
     print(f"총 리뷰 개수(중복 제거 후): {len(reviews)}개")
     print("DB 저장 완료")
