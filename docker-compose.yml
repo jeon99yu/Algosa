@@ -1,0 +1,19 @@
+version: "3.11"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: musinsa_app
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - USE_MYSQL=${USE_MYSQL:-0}
+      - DB_PATH=/app/db/musinsa.db
+    volumes:
+      - ./db:/app/db         # SQLite 
+      - ./assets:/app/assets 
+    restart: unless-stopped
