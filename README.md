@@ -44,7 +44,7 @@
 ### ERD 구조
 ![ERD](assets/info/erd.png)
 
-### 아키텍처 구조 (추후 변경예정)
+### 아키텍처 구조(추후 변경예정)
 ![메인화면](assets/info/architecture.png)
 
 
